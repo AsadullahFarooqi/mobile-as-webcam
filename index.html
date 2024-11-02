@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Android Camera Stream</title>
+</head>
+<body>
+    <h1>Android Camera Stream</h1>
+    <video id="video" width="640" height="480" autoplay></video>
+    <button id="flipButton">Flip Camera</button>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const DEBUG = urlParams.get('debug') === 'true';
+        let currentStream = null;
+        let useFrontCamera = true;
+        let mediaRecorder = null;
+        let socket = null;
+
+        async function startCamera() {
+            const video = document.getElementById('video');
+            const constraints = {
+                video: {
+                    facingMode: useFrontCamera ? 'user' : 'environment'
+                }
+            };
+
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                try {
+                    if (currentStream) {
+                        currentStream.getTracks().forEach(track => track.stop());
+                    }
+
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    currentStream = stream;
+                    video.srcObject = stream;
+
+                    // Stop previous MediaRecorder and WebSocket if they exist
+                    if (mediaRecorder) {
+                        mediaRecorder.stop();
+                    }
+                    if (socket) {
+                        socket.close();
+                    }
+
+                    // Create a new secure WebSocket to send the video data to the server
+                    socket = new WebSocket('wss://192.168.100.101:8080/ws');
+
+                    socket.onopen = () => {
+                        console.log('WebSocket connection opened');
+
+                        // Create a new MediaRecorder to capture the stream
+                        mediaRecorder = new MediaRecorder(stream, {
+                            mimeType: 'video/webm; codecs=vp8',
+                            videoBitsPerSecond: 1000000 // Adjust bitrate as needed
+                        });
+
+                        mediaRecorder.start(10); // Capture video in chunks of 10ms
+
+                        mediaRecorder.ondataavailable = (event) => {
+                            const captureTime = Date.now();
+                            if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+                                if (DEBUG) console.log('Sending data at', captureTime);
+                                socket.send(event.data);
+                            }
+                        };
+
+                        mediaRecorder.onstop = () => {
+                            console.log('MediaRecorder stopped');
+                            if (socket.readyState === WebSocket.OPEN) {
+                                socket.close();
+                            }
+                        };
+                    };
+
+                    socket.onclose = () => {
+                        console.log('WebSocket connection closed');
+                    };
+
+                    socket.onerror = (error) => {
+                        if (DEBUG) console.error('WebSocket error:', error);
+                    };
+
+                } catch (err) {
+                    console.error('Error accessing camera: ', err);
+                    alert('Error accessing camera: ' + err.message);
+                }
+            } else {
+                alert('getUserMedia is not supported in this browser.');
+            }
+        }
+
+        document.getElementById('flipButton').addEventListener('click', () => {
+            useFrontCamera = !useFrontCamera;
+            startCamera();
+        });
+
+        window.onload = startCamera;
+    </script>
+</body>
+</html>

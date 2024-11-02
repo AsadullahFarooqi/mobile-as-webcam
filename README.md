@@ -1,5 +1,8 @@
 # Android phone as a webcam on Linux
 
+> **_NOTE:_**  I tested this project and it started working but forgot to document at the time, this readme is a bit out-dated because it doesn't have the ssl setup guide.
+
+
 So the way it works is that the phone sends the stream on the LAN to the computer and the computer registers a virtual webcam and uses `ffmpeg` to read the stream through websocket and feed to the virtual webcam device and tata you have a phone as a webcam. 
 
 1. **Verify `v4l2loopback` Module:**
